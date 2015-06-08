@@ -10,6 +10,7 @@ module Network.Wai.Handler.Warp.HTTP2.Request (
 
 import Control.Applicative ((<$>))
 import Control.Concurrent.STM
+import Data.Maybe (isJust)
 import Control.Monad (when)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
@@ -80,10 +81,19 @@ validateHeaders hs = case go hs True (emptyPseudo,id) of
   where
     go [] _ (p,b)         = Just (p,b [])
     go h@((k,v):kvs) True (p,b)
-      | k == ":method"    = go kvs True (p { colonMethod = Just v },b)
-      | k == ":path"      = go kvs True (p { colonPath   = Just v },b)
-      | k == ":authority" = go kvs True (p { colonAuth   = Just v },b)
-      | k == ":scheme"    = go kvs True (p,b)
+      | k == ":method"    = if isJust (colonMethod p) then
+                                Nothing
+                              else
+                                go kvs True (p { colonMethod = Just v },b)
+      | k == ":path"      = if isJust (colonPath p) then
+                                Nothing
+                              else
+                                go kvs True (p { colonPath   = Just v },b)
+      | k == ":authority" = if isJust (colonAuth p) then
+                                Nothing
+                              else
+                                go kvs True (p { colonAuth   = Just v },b)
+      | k == ":scheme"    = go kvs True (p,b) -- FIXME
       | isPseudo k        = Nothing
       | otherwise         = go h False (p,b)
     go ((k,v):kvs) False (p,b)
