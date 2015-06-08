@@ -92,7 +92,7 @@ frameReceiver ctx@Context{..} mkreq src =
           case state' of
               NoBody hdr -> do
                   resetContinued
-                  case validateHeadrs hdr of
+                  case validateHeaders hdr of
                       Just vh -> do
                           when (vhCL vh /= Nothing && vhCL vh /= Just 0) $
                               E.throwIO $ StreamError ProtocolError streamId
@@ -103,7 +103,7 @@ frameReceiver ctx@Context{..} mkreq src =
                       Nothing -> E.throwIO $ StreamError ProtocolError streamId
               HasBody hdr -> do
                   resetContinued
-                  case validateHeadrs hdr of
+                  case validateHeaders hdr of
                       Just vh -> do
                           q <- newTQueueIO
                           writeIORef streamState (Body q)

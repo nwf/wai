@@ -5,7 +5,7 @@ module Network.Wai.Handler.Warp.HTTP2.Request (
   , newReadBody
   , MkReq
   , ValidHeaders(..)
-  , validateHeadrs
+  , validateHeaders
   ) where
 
 import Control.Applicative ((<$>))
@@ -72,8 +72,8 @@ data Pseudo = Pseudo {
 emptyPseudo :: Pseudo
 emptyPseudo = Pseudo Nothing Nothing Nothing Nothing
 
-validateHeadrs :: HeaderList -> Maybe ValidHeaders
-validateHeadrs hs = case go hs True (emptyPseudo,id) of
+validateHeaders :: HeaderList -> Maybe ValidHeaders
+validateHeaders hs = case go hs True (emptyPseudo,id) of
     Just (Pseudo (Just m) (Just p) ma mcl, h)
         -> Just $ ValidHeaders m p ma (readInt <$> mcl) h
     _   -> Nothing
