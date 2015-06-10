@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings, CPP #-}
 
 module Network.Wai.Handler.Warp.HTTP2.Request (
     mkRequest
@@ -8,16 +8,20 @@ module Network.Wai.Handler.Warp.HTTP2.Request (
   , validateHeaders
   ) where
 
+#if __GLASGOW_HASKELL__ < 709
 import Control.Applicative ((<$>))
+#endif
 import Control.Concurrent.STM
-import Data.Maybe (isJust)
 import Control.Monad (when)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as B8
 import Data.CaseInsensitive (mk)
 import Data.IORef (IORef, readIORef, newIORef, writeIORef)
+import Data.Maybe (isJust)
+#if __GLASGOW_HASKELL__ < 709
 import Data.Monoid (mempty)
+#endif
 import Data.Word8 (isUpper,_colon)
 import Network.HPACK
 import Network.HTTP.Types (RequestHeaders,hRange)

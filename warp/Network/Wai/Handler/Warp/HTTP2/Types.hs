@@ -1,8 +1,10 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings, CPP #-}
 
 module Network.Wai.Handler.Warp.HTTP2.Types where
 
+#if __GLASGOW_HASKELL__ < 709
 import Control.Applicative ((<$>),(<*>))
+#endif
 import Control.Concurrent
 import Control.Concurrent.STM
 import Control.Reaper
