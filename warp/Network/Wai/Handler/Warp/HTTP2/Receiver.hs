@@ -53,7 +53,7 @@ frameReceiver ctx@Context{..} mkreq src =
         mx <- readIORef continued
         case mx of
             Nothing -> do
-                -- ignoring unknow frame
+                -- ignoring unknown frame
                 consume payloadLength
                 return True
             Just _  -> E.throwIO $ ConnectionError ProtocolError "stream id should be odd"
