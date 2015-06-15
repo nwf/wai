@@ -20,8 +20,8 @@ instance Exception Break
 
 -- fixme: tickle activity
 -- fixme: sending a reset frame?
-worker :: Context -> T.Manager -> Application -> EnqRsp -> IO ()
-worker Context{..} tm app enQResponse = do
+worker :: Context -> T.Manager -> Application -> Responder -> IO ()
+worker Context{..} tm app responder = do
     tid <- myThreadId
     bracket (T.register tm (E.throwTo tid Break)) T.cancel $ \th ->
         go th `E.catch` gonext th
@@ -29,7 +29,7 @@ worker Context{..} tm app enQResponse = do
     go th = forever $ do
         Input strm@Stream{..} req <- atomically $ readTQueue inputQ
         T.tickle th
-        void $ app req $ enQResponse strm
+        void $ app req $ responder strm
         -- fixme: how to remove Closed streams from streamTable?
         writeIORef streamState Closed
     gonext th Break = go th `E.catch` gonext th

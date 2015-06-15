@@ -12,7 +12,7 @@ import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.IntMap.Strict as M
 import Network.Wai.Handler.Warp.HTTP2.Request
-import Network.Wai.Handler.Warp.HTTP2.Sender
+import Network.Wai.Handler.Warp.HTTP2.Response
 import Network.Wai.Handler.Warp.HTTP2.Types
 import Network.Wai.Handler.Warp.IORef
 import Network.Wai.Handler.Warp.Types
@@ -28,20 +28,20 @@ frameReceiver ctx@Context{..} mkreq src =
   where
     sendGoaway (ConnectionError err msg) = do
         csid <- readIORef currentStreamId
-        let rsp = goawayFrame (toStreamIdentifier csid) err msg
+        let frame = goawayFrame (toStreamIdentifier csid) err msg
         atomically $ do
-            writeTQueue outputQ rsp
-            writeTQueue outputQ ""
+            writeTQueue outputQ (OFrame frame)
+            writeTQueue outputQ OFinish
     sendGoaway _                         = return ()
 
     sendReset err sid = do
-        let rsp = resetFrame err sid
-        atomically $ writeTQueue outputQ rsp
+        let frame = resetFrame err sid
+        atomically $ writeTQueue outputQ (OFrame frame)
 
     loop = do
         hd <- readBytes frameHeaderLength
         if BS.null hd then
-            atomically $ writeTQueue outputQ ""
+            atomically $ writeTQueue outputQ OFinish
           else do
             cont <- guardError $ decodeFrameHeader hd
             when cont loop
@@ -181,20 +181,20 @@ control FrameSettings header@FrameHeader{..} bs Context{..} = do
         Nothing -> return ()
     unless (testAck flags) $ do
         modifyIORef http2settings $ \old -> updateSettings old alist
-        let rsp = settingsFrame setAck []
-        atomically $ writeTQueue outputQ rsp
+        let frame = settingsFrame setAck []
+        atomically $ writeTQueue outputQ (OFrame frame)
     return True
 
 control FramePing FrameHeader{..} bs Context{..} =
     if testAck flags then
         E.throwIO $ ConnectionError ProtocolError "the ack flag of this ping frame must not be set"
       else do
-        let rsp = pingFrame bs
-        atomically $ writeTQueue outputQ rsp
+        let frame = pingFrame bs
+        atomically $ writeTQueue outputQ (OFrame frame)
         return True
 
 control FrameGoAway _ _ Context{..} = do
-    atomically $ writeTQueue outputQ ""
+    atomically $ writeTQueue outputQ OFinish
     return False
 
 control FrameWindowUpdate header@FrameHeader{..} bs Context{..} = do

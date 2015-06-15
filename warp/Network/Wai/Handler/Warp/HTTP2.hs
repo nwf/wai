@@ -5,7 +5,6 @@
 module Network.Wai.Handler.Warp.HTTP2 (isHTTP2, http2) where
 
 import Control.Concurrent (forkIO, killThread)
-import Control.Concurrent.STM
 import qualified Control.Exception as E
 import Control.Monad (when, unless, replicateM)
 import Data.ByteString (ByteString)
@@ -30,18 +29,16 @@ http2 conn ii addr transport settings src app = do
     ok <- checkPreface
     when ok $ do
         ctx <- newContext
-        let enQResponse = enqueueRsp ctx ii settings
+        let response = output ctx
             mkreq = mkRequest settings addr
         tid <- forkIO $ frameReceiver ctx mkreq src
         -- To prevent thread-leak, we executed the fixed number of threads
         -- statically.
         -- fixme: 6 is hard-coded
-        tids <- replicateM 6 $ forkIO $ worker ctx tm app enQResponse
-        let rsp = settingsFrame id [(SettingsMaxConcurrentStreams,defaultConcurrency)]
-        atomically $ writeTQueue (outputQ ctx) rsp
+        tids <- replicateM 6 $ forkIO $ worker ctx tm app response
         -- frameSender is the main thread because it ensures to send
         -- a goway frame.
-        frameSender conn ii ctx `E.finally` mapM_ killThread (tid:tids)
+        frameSender ctx conn ii settings `E.finally` mapM_ killThread (tid:tids)
   where
     tm = timeoutManager ii
     checkTLS = case transport of

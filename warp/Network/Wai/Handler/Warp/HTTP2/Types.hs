@@ -13,7 +13,7 @@ import Data.IORef (IORef, newIORef)
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as M
 import qualified Network.HTTP.Types as H
-import Network.Wai (Request)
+import Network.Wai (Request, Response)
 import Network.Wai.Handler.Warp.Types
 
 import Network.HTTP2
@@ -34,7 +34,13 @@ isHTTP2 tls = useHTTP2
 
 ----------------------------------------------------------------
 
+data Next = Next Int (Maybe (IO Next))
+
 data Input = Input Stream Request
+data Output = OFinish
+            | OResponse Stream Response
+            | OFrame ByteString
+            | ONext (IO Next) Int -- fixme: stream id
 
 type StreamTable = IntMap Stream
 
@@ -45,7 +51,7 @@ data Context = Context {
   , continued          :: IORef (Maybe StreamIdentifier)
   , currentStreamId    :: IORef Int
   , inputQ             :: TQueue Input
-  , outputQ            :: TQueue ByteString
+  , outputQ            :: TQueue Output
   , encodeDynamicTable :: IORef DynamicTable
   , decodeDynamicTable :: IORef DynamicTable
   , wait               :: MVar ()
