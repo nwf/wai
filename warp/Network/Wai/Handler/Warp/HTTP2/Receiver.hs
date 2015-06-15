@@ -87,7 +87,6 @@ frameReceiver ctx@Context{..} mkreq src =
           pl <- readBytes payloadLength
           state <- readIORef streamState
           state' <- stream ftyp header pl ctx state strm
-          writeIORef streamActivity Active
           case state' of
               NoBody hdr -> do
                   resetContinued
@@ -97,7 +96,6 @@ frameReceiver ctx@Context{..} mkreq src =
                               E.throwIO $ StreamError ProtocolError streamId
                           writeIORef streamState HalfClosed
                           let req = mkreq vh (return "")
-                          writeIORef streamActivity Active
                           atomically $ writeTQueue inputQ $ Input strm req
                       Nothing -> E.throwIO $ StreamError ProtocolError streamId
               HasBody hdr -> do
@@ -110,7 +108,6 @@ frameReceiver ctx@Context{..} mkreq src =
                           readQ <- newReadBody q
                           bodySource <- mkSource readQ
                           let req = mkreq vh (readSource bodySource)
-                          writeIORef streamActivity Active
                           atomically $ writeTQueue inputQ $ Input strm req
                       Nothing -> E.throwIO $ StreamError ProtocolError streamId
               s@(Continued _ _) -> do

@@ -68,20 +68,17 @@ enqueueRsp ctx@Context{..} ii settings Stream{..} (ResponseFile st hdr0 file _) 
           else do
             let datframe = encodeFrame einfo $ DataFrame bs0
             atomically $ writeTQueue outputQ datframe
-            writeIORef streamActivity Active
             loop hdl bs
 
 enqueueRsp ctx@Context{..} ii settings Stream{..} (ResponseStream st hdr0 sb) = do
     hdrframe <- headerFrame ctx ii settings streamNumber st hdr0
     atomically $ writeTQueue outputQ hdrframe
-    writeIORef streamActivity Active
     sb send $ return ()
     flush'
     return ResponseReceived
   where
     send bb = do
         atomically $ writeTQueue outputQ datframe
-        writeIORef streamActivity Active
       where
         einfo = encodeInfo id streamNumber
         datframe = encodeFrame einfo $ DataFrame $ toByteString bb
