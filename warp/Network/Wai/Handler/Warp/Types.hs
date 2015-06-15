@@ -119,6 +119,7 @@ data Connection = Connection {
 -- | Internal information.
 data InternalInfo = InternalInfo {
     threadHandle :: T.Handle
+  , timeoutManager :: T.Manager
   , fdCacher :: Maybe F.MutableFdCache
   , dateCacher :: D.DateCache
   }

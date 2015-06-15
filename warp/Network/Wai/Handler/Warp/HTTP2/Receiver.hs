@@ -8,7 +8,6 @@ import Control.Concurrent (takeMVar)
 import Control.Concurrent.STM
 import qualified Control.Exception as E
 import Control.Monad (when, unless, void)
-import Control.Reaper
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.IntMap.Strict as M
@@ -139,7 +138,7 @@ frameReceiver ctx@Context{..} mkreq src =
                    E.throwIO $ ConnectionError ProtocolError "stream identifier must not decrease"
                  else
                    writeIORef currentStreamId stid
-             m0 <- reaperRead streamTable
+             m0 <- readIORef streamTable
              case M.lookup stid m0 of
                  Just strm0 -> return strm0
                  Nothing -> do
@@ -149,7 +148,8 @@ frameReceiver ctx@Context{..} mkreq src =
                      when (cnt >= defaultConcurrency) $
                          E.throwIO $ StreamError RefusedStream streamId
                      newstrm <- newStream stid
-                     reaperAdd streamTable (stid, newstrm)
+                     let m1 = M.insert stid newstrm m0
+                     writeIORef streamTable m1
                      atomicModifyIORef' concurrency $ \x -> (x+1, ())
                      return newstrm
 

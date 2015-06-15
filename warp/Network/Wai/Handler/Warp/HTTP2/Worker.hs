@@ -12,6 +12,7 @@ import Network.Wai
 import Network.Wai.Handler.Warp.HTTP2.Response
 import Network.Wai.Handler.Warp.HTTP2.Types
 import Network.Wai.Handler.Warp.IORef
+import qualified Network.Wai.Handler.Warp.Timeout as T
 
 data Break = Break deriving (Show, Typeable)
 
@@ -19,16 +20,17 @@ instance Exception Break
 
 -- fixme: tickle activity
 -- fixme: sending a reset frame?
-worker :: Context -> Application -> EnqRsp -> IO ()
-worker Context{..} app enQResponse = go `E.catch` gonext
+worker :: Context -> T.Manager -> Application -> EnqRsp -> IO ()
+worker Context{..} tm app enQResponse = do
+    tid <- myThreadId
+    bracket (T.register tm (E.throwTo tid Break)) T.cancel $ \th ->
+        go th `E.catch` gonext th
   where
-    go = forever $ do
+    go th = forever $ do
         Input strm@Stream{..} req <- atomically $ readTQueue inputQ
-        tid <- myThreadId
-        E.bracket (writeIORef streamTimeoutAction $ E.throwTo tid Break)
-                  (\_ -> writeIORef streamTimeoutAction $ return ())
-                  $ \_ -> do
-                      void $ app req $ enQResponse strm
-                      writeIORef streamState Closed
-    gonext Break = go `E.catch` gonext
+        T.tickle th
+        void $ app req $ enQResponse strm
+        -- fixme: how to remove Closed streams from streamTable?
+        writeIORef streamState Closed
+    gonext th Break = go th `E.catch` gonext th
 

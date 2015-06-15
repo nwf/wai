@@ -269,7 +269,7 @@ fork set mkConn addr app dc fc tm counter = settingsFork set $ \ unmask ->
     -- cancel that handler as soon as we exit.
     bracket (T.registerKillThread tm) T.cancel $ \th ->
 
-    let ii = InternalInfo th fc dc
+    let ii = InternalInfo th tm fc dc
         -- We now have fully registered a connection close handler
         -- in the case of all exceptions, so it is safe to one
         -- again allow async exceptions.

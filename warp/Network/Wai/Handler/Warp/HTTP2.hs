@@ -17,7 +17,6 @@ import Network.Wai.Handler.Warp.HTTP2.Receiver
 import Network.Wai.Handler.Warp.HTTP2.Request
 import Network.Wai.Handler.Warp.HTTP2.Response
 import Network.Wai.Handler.Warp.HTTP2.Sender
-import Network.Wai.Handler.Warp.HTTP2.Timeout
 import Network.Wai.Handler.Warp.HTTP2.Types
 import Network.Wai.Handler.Warp.HTTP2.Worker
 import qualified Network.Wai.Handler.Warp.Settings as S (Settings)
@@ -29,21 +28,22 @@ http2 :: Connection -> InternalInfo -> SockAddr -> Transport -> S.Settings -> So
 http2 conn ii addr transport settings src app = do
     checkTLS
     ok <- checkPreface
-    when ok $ withTimer 5000000 $ \strmtbl -> do -- fixme: hard-coding
-        ctx <- newContext strmtbl
+    when ok $ do
+        ctx <- newContext
         let enQResponse = enqueueRsp ctx ii settings
             mkreq = mkRequest settings addr
         tid <- forkIO $ frameReceiver ctx mkreq src
         -- To prevent thread-leak, we executed the fixed number of threads
         -- statically.
         -- fixme: 6 is hard-coded
-        tids <- replicateM 6 $ forkIO $ worker ctx app enQResponse
+        tids <- replicateM 6 $ forkIO $ worker ctx tm app enQResponse
         let rsp = settingsFrame id [(SettingsMaxConcurrentStreams,defaultConcurrency)]
         atomically $ writeTQueue (outputQ ctx) rsp
         -- frameSender is the main thread because it ensures to send
         -- a goway frame.
         frameSender conn ii ctx `E.finally` mapM_ killThread (tid:tids)
   where
+    tm = timeoutManager ii
     checkTLS = case transport of
         TCP -> return () -- direct
         tls -> unless (tls12orLater tls) $ goaway conn InadequateSecurity "Weak TLS"

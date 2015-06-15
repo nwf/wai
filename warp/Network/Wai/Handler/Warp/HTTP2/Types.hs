@@ -7,11 +7,11 @@ import Control.Applicative ((<$>),(<*>))
 #endif
 import Control.Concurrent
 import Control.Concurrent.STM
-import Control.Reaper
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import Data.IORef (IORef, newIORef)
 import Data.IntMap.Strict (IntMap)
+import qualified Data.IntMap.Strict as M
 import qualified Network.HTTP.Types as H
 import Network.Wai (Request)
 import Network.Wai.Handler.Warp.Types
@@ -36,11 +36,11 @@ isHTTP2 tls = useHTTP2
 
 data Input = Input Stream Request
 
-type StreamTable = Reaper (IntMap Stream) (Int, Stream)
+type StreamTable = IntMap Stream
 
 data Context = Context {
-    streamTable        :: StreamTable
-  , http2settings      :: IORef Settings
+    http2settings      :: IORef Settings
+  , streamTable        :: IORef StreamTable
   , concurrency        :: IORef Int
   , continued          :: IORef (Maybe StreamIdentifier)
   , currentStreamId    :: IORef Int
@@ -53,16 +53,17 @@ data Context = Context {
 
 ----------------------------------------------------------------
 
-newContext :: StreamTable -> IO Context
-newContext st = Context st <$> newIORef defaultSettings
-                           <*> newIORef 0
-                           <*> newIORef Nothing
-                           <*> newIORef 0
-                           <*> newTQueueIO
-                           <*> newTQueueIO
-                           <*> (newDynamicTableForEncoding 4096 >>= newIORef)
-                           <*> (newDynamicTableForDecoding 4096 >>= newIORef)
-                           <*> newEmptyMVar
+newContext :: IO Context
+newContext = Context <$> newIORef defaultSettings
+                     <*> newIORef M.empty
+                     <*> newIORef 0
+                     <*> newIORef Nothing
+                     <*> newIORef 0
+                     <*> newTQueueIO
+                     <*> newTQueueIO
+                     <*> (newDynamicTableForEncoding 4096 >>= newIORef)
+                     <*> (newDynamicTableForDecoding 4096 >>= newIORef)
+                     <*> newEmptyMVar
 
 ----------------------------------------------------------------
 
