@@ -87,12 +87,12 @@ responseToNext Connection{..} _ off (ResponseBuilder _ _ bb) = do
     (len, signal) <- B.runBuilder bb datBuf room
     nextForBuilder len connWriteBuffer connBufferSize signal
 
--- fixme: filepart
 responseToNext Connection{..} ii off (ResponseFile _ _ path mpart) = do
+    -- fixme: no fdcache
     let Just fdcache = fdCacher ii
     (fd, refresh) <- getFd fdcache path
     let datBuf = connWriteBuffer `plusPtr` off
-        Just part = mpart -- fixme
+        Just part = mpart -- fixme: Nothing
         room = connBufferSize - off
         start = filePartOffset part
         bytes = filePartByteCount part
@@ -142,6 +142,7 @@ mini i n
   | fromIntegral i < n = i
   | otherwise          = fromIntegral n
 
+-- fixme: Windows
 positionRead :: Fd -> Buffer -> BufSize -> Integer -> IO Int
 positionRead (Fd fd) buf siz off =
     fromIntegral <$> c_pread fd (castPtr buf) (fromIntegral siz) (fromIntegral off)
