@@ -47,14 +47,15 @@ frameSender ctx@Context{..} conn@Connection{..} ii settings = do
         let otherLen = BS.length hdrframe
             datPayloadOff = otherLen + frameHeaderLength
         Next datPayloadLen mnext <- responseToNext conn ii datPayloadOff rsp
-        fillSend otherLen datPayloadLen mnext sid
-    switch (ONext curr sid) = do
+        fillSend strm otherLen datPayloadLen mnext
+    switch (ONext strm curr) = do
         -- Data frame
         Next datPayloadLen mnext <- curr
-        fillSend 0 datPayloadLen mnext sid
-    fillSend otherLen datPayloadLen mnext sid = do
+        fillSend strm 0 datPayloadLen mnext
+    fillSend strm otherLen datPayloadLen mnext = do
         -- fixme: length check
-        let dathdr = dataFrameHeadr datPayloadLen sid mnext
+        let sid = streamNumber strm
+            dathdr = dataFrameHeadr datPayloadLen sid mnext
         void $ copy (connWriteBuffer `plusPtr` otherLen) dathdr
         let total = otherLen + frameHeaderLength  + datPayloadLen
         bs <- toBS connWriteBuffer total
@@ -62,7 +63,7 @@ frameSender ctx@Context{..} conn@Connection{..} ii settings = do
         case mnext of
             Nothing   -> loop
             Just next -> do
-                atomically $ writeTQueue outputQ (ONext next sid)
+                atomically $ writeTQueue outputQ (ONext strm next)
                 loop
     dataFrameHeadr len sid mnext = encodeFrameHeader FrameData hinfo
       where

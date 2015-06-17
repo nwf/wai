@@ -40,7 +40,7 @@ data Input = Input Stream Request
 data Output = OFinish
             | OResponse Stream Response
             | OFrame ByteString
-            | ONext (IO Next) Int -- fixme: stream id
+            | ONext Stream (IO Next)
 
 type StreamTable = IntMap Stream
 
