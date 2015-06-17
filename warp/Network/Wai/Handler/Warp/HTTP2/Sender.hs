@@ -125,7 +125,9 @@ nextForBuilder len buf siz (B.Chunk bs writer)
 
 fillBufFile :: Buffer -> BufSize -> Fd -> Integer -> Integer -> IO () -> IO Next
 fillBufFile buf siz fd start bytes refresh = do
-    len <- positionRead fd buf (mini siz bytes) start
+    let payloadBuf = buf `plusPtr` frameHeaderLength
+        room = siz - frameHeaderLength
+    len <- positionRead fd payloadBuf (mini room bytes) start
     let len' = fromIntegral len
     refresh
     nextForFile len buf siz fd (start + len') (bytes - len') refresh
