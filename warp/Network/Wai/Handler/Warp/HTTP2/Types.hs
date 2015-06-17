@@ -96,6 +96,7 @@ instance Show StreamState where
 data Stream = Stream {
     streamNumber        :: Int
   , streamState         :: IORef StreamState
+  -- Next two fields are for error checking.
   , streamContentLength :: IORef (Maybe Int)
   , streamBodyLength    :: IORef Int
   }
