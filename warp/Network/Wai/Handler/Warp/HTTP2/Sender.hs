@@ -41,7 +41,7 @@ frameSender ctx@Context{..} conn@Connection{..} ii settings = do
         -- Header frame
         let sid = streamNumber strm
         hdrframe <- headerFrame ctx ii settings sid rsp
-        -- fixme: length check
+        -- fixme: length check + Continue
         void $ copy connWriteBuffer hdrframe
         -- Data frame
         let otherLen = BS.length hdrframe
