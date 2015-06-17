@@ -8,6 +8,8 @@ import qualified Control.Exception as E
 import Control.Monad (void)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Builder.Extra as B
+import Data.IORef (writeIORef)
+import Foreign.C.Types
 import Foreign.Ptr
 import Network.HTTP2
 import Network.Wai
@@ -19,11 +21,9 @@ import Network.Wai.Handler.Warp.HTTP2.Types
 import qualified Network.Wai.Handler.Warp.Settings as S
 import Network.Wai.Handler.Warp.Types
 import Network.Wai.Internal (Response(..))
-import Foreign.C.Types
 import System.Posix.Types
 
 ----------------------------------------------------------------
--- fixme: Close state
 
 frameSender :: Context -> Connection -> InternalInfo -> S.Settings -> IO ()
 frameSender ctx@Context{..} conn@Connection{..} ii settings = do
@@ -61,7 +61,9 @@ frameSender ctx@Context{..} conn@Connection{..} ii settings = do
         bs <- toBS connWriteBuffer total
         connSendAll bs
         case mnext of
-            Nothing   -> loop
+            Nothing   -> do
+                writeIORef (streamState strm) Closed
+                loop
             Just next -> do
                 atomically $ writeTQueue outputQ (ONext strm next)
                 loop
