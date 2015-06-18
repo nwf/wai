@@ -31,6 +31,6 @@ worker Context{..} tm app responder = do
         T.tickle th
         void $ app req $ responder strm
         -- fixme: how to remove Closed streams from streamTable?
-        writeIORef streamState Closed
+        writeIORef streamState (Closed Killed)
     gonext th Break = go th `E.catch` gonext th
 

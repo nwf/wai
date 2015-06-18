@@ -113,7 +113,7 @@ frameReceiver ctx@Context{..} mkreq src =
               s@(Continued _ _) -> do
                   setContinued
                   writeIORef streamState s
-              s -> do -- Body, HalfClosed, Idle
+              s -> do -- Body, HalfClosed, Idle, Closed
                   resetContinued
                   writeIORef streamState s
           return True
@@ -253,12 +253,16 @@ stream FrameContinuation FrameHeader{..} frag ctx (Continued rfrags endOfStream)
 
 stream FrameContinuation _ _ _ _ _ = E.throwIO $ ConnectionError ProtocolError "continue frame cannot come here"
 
-stream FrameWindowUpdate header@FrameHeader{..} bs Context{..} s _ = do
+stream FrameWindowUpdate header@FrameHeader{..} bs Context{..} s Stream{..} = do
     WindowUpdateFrame _ <- guardIt $ decodeWindowUpdateFrame header bs
     -- fixme: valid case
     return s
 
--- this ordering is important
+stream FrameRSTStream header bs _ _ Stream{..} = do
+    RSTStreamFrame e <- guardIt $ decoderstStreamFrame header bs
+    return $ Closed (Reset e) -- will be written to streamState
+
+    -- this ordering is important
 stream _ _ _ _ (Continued _ _) _ = E.throwIO $ ConnectionError ProtocolError "an illegal frame follows header/continuation frames"
 stream FrameData FrameHeader{..} _ _ _ _ = E.throwIO $ StreamError StreamClosed streamId
 stream _ FrameHeader{..} _ _ _ _ = E.throwIO $ StreamError ProtocolError streamId

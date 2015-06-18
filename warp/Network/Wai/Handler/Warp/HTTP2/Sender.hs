@@ -62,7 +62,7 @@ frameSender ctx@Context{..} conn@Connection{..} ii settings = do
         connSendAll bs
         case mnext of
             Nothing   -> do
-                writeIORef (streamState strm) Closed
+                writeIORef (streamState strm) (Closed Finished)
                 loop
             Just next -> do
                 atomically $ writeTQueue outputQ (ONext strm next)

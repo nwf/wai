@@ -73,6 +73,8 @@ newContext = Context <$> newIORef defaultSettings
 
 ----------------------------------------------------------------
 
+data ClosedCode = Finished | Killed | Reset ErrorCodeId deriving Show
+
 data StreamState =
     Idle
   | Continued [HeaderBlockFragment] Bool
@@ -80,7 +82,7 @@ data StreamState =
   | HasBody HeaderList
   | Body (TQueue ByteString)
   | HalfClosed
-  | Closed
+  | Closed ClosedCode
 
 instance Show StreamState where
     show Idle            = "Idle"
@@ -89,7 +91,7 @@ instance Show StreamState where
     show (HasBody _)     = "HasBody"
     show (Body _)        = "Body"
     show HalfClosed      = "HalfClosed"
-    show Closed          = "Closed"
+    show (Closed e)      = "Closed: " ++ show e
 
 ----------------------------------------------------------------
 
