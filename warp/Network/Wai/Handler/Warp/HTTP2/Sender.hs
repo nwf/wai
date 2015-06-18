@@ -136,9 +136,10 @@ fillBufFile buf siz fd start bytes refresh = do
     nextForFile len buf siz fd (start + len') (bytes - len') refresh
 
 nextForFile :: Int -> Buffer -> BufSize -> Fd -> Integer -> Integer -> IO () -> IO Next
-nextForFile len buf siz fd start bytes refresh
-  | len == 0  = return $ Next len Nothing
-  | otherwise = return $ Next len (Just (fillBufFile buf siz fd start bytes refresh))
+nextForFile 0   _   _   _  _     _     _       = return $ Next 0 Nothing
+nextForFile len _   _   _  _     0     _       = return $ Next len Nothing
+nextForFile len buf siz fd start bytes refresh =
+    return $ Next len (Just (fillBufFile buf siz fd start bytes refresh))
 
 mini :: Int -> Integer -> Int
 mini i n
