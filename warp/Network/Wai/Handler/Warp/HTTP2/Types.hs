@@ -10,6 +10,7 @@ import Control.Concurrent.STM
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import Data.IORef (IORef, newIORef)
+import Data.Int (Int64)
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as M
 import qualified Network.HTTP.Types as H
@@ -44,6 +45,8 @@ data Output = OFinish
 
 type StreamTable = IntMap Stream
 
+type Window = Int64
+
 data Context = Context {
     http2settings      :: IORef Settings
   , streamTable        :: IORef StreamTable
@@ -55,6 +58,7 @@ data Context = Context {
   , encodeDynamicTable :: IORef DynamicTable
   , decodeDynamicTable :: IORef DynamicTable
   , wait               :: MVar ()
+  , connectionWindow   :: IORef Window
   }
 
 ----------------------------------------------------------------
@@ -70,6 +74,7 @@ newContext = Context <$> newIORef defaultSettings
                      <*> (newDynamicTableForEncoding 4096 >>= newIORef)
                      <*> (newDynamicTableForDecoding 4096 >>= newIORef)
                      <*> newEmptyMVar
+                     <*> newIORef 65535 -- fixme
 
 ----------------------------------------------------------------
 
@@ -101,12 +106,14 @@ data Stream = Stream {
   -- Next two fields are for error checking.
   , streamContentLength :: IORef (Maybe Int)
   , streamBodyLength    :: IORef Int
+  , streamWindow        :: IORef Window
   }
 
-newStream :: Int -> IO Stream
-newStream sid = Stream sid <$> newIORef Idle
-                           <*> newIORef Nothing
-                           <*> newIORef 0
+newStream :: Int -> Window -> IO Stream
+newStream sid win = Stream sid <$> newIORef Idle
+                               <*> newIORef Nothing
+                               <*> newIORef 0
+                               <*> newIORef win
 
 ----------------------------------------------------------------
 

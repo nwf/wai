@@ -144,7 +144,8 @@ frameReceiver ctx@Context{..} mkreq src =
                      cnt <- readIORef concurrency
                      when (cnt >= defaultConcurrency) $
                          E.throwIO $ StreamError RefusedStream streamId
-                     newstrm <- newStream stid
+                     ws <- initialWindowSize <$> readIORef http2settings
+                     newstrm <- newStream stid (fromIntegral ws)
                      let m1 = M.insert stid newstrm m0
                      writeIORef streamTable m1
                      atomicModifyIORef' concurrency $ \x -> (x+1, ())
