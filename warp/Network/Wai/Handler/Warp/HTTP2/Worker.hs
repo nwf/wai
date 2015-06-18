@@ -18,19 +18,28 @@ data Break = Break deriving (Show, Typeable)
 
 instance Exception Break
 
--- fixme: tickle activity
 -- fixme: sending a reset frame?
 worker :: Context -> T.Manager -> Application -> Responder -> IO ()
 worker Context{..} tm app responder = do
     tid <- myThreadId
+    ref <- newIORef Nothing
     bracket (T.register tm (E.throwTo tid Break)) T.cancel $ \th ->
-        go th `E.catch` gonext th
+        go th ref `E.catch` gonext th ref
   where
-    go th = forever $ do
-        Input strm@Stream{..} req <- atomically $ readTQueue inputQ
+    go th ref = forever $ do
+        Input strm req <- atomically $ readTQueue inputQ
         T.tickle th
+        writeIORef ref (Just strm)
+        -- fixme: what about IO errors?
         void $ app req $ responder strm
-        -- fixme: how to remove Closed streams from streamTable?
-        writeIORef streamState (Closed Killed)
-    gonext th Break = go th `E.catch` gonext th
+    gonext th ref Break = doit `E.catch` gonext th ref
+      where
+        doit = do
+            m <- readIORef ref
+            case m of
+                Nothing   -> return ()
+                Just strm -> do
+                    writeIORef (streamState strm) $ Closed Killed
+                    writeIORef ref Nothing
+                    go th ref
 

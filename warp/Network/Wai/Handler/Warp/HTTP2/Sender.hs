@@ -8,7 +8,7 @@ import qualified Control.Exception as E
 import Control.Monad (void)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Builder.Extra as B
-import Data.IORef (writeIORef)
+import Data.IORef (readIORef, writeIORef)
 import Foreign.C.Types
 import Foreign.Ptr
 import Network.HTTP2
@@ -25,6 +25,13 @@ import System.Posix.Types
 
 ----------------------------------------------------------------
 
+unlessClosed :: Stream -> IO () -> IO ()
+unlessClosed Stream{..} body = do
+    state <- readIORef streamState
+    case state of
+        Closed _ -> print state
+        _        -> body
+
 frameSender :: Context -> Connection -> InternalInfo -> S.Settings -> IO ()
 frameSender ctx@Context{..} conn@Connection{..} ii settings = do
     connSendAll initialFrame
@@ -37,7 +44,7 @@ frameSender ctx@Context{..} conn@Connection{..} ii settings = do
     switch (OFrame frame) = do
         connSendAll frame
         loop
-    switch (OResponse strm rsp) = do
+    switch (OResponse strm rsp) = unlessClosed strm $ do
         -- Header frame
         let sid = streamNumber strm
         hdrframe <- headerFrame ctx ii settings sid rsp
@@ -48,7 +55,7 @@ frameSender ctx@Context{..} conn@Connection{..} ii settings = do
             datPayloadOff = otherLen + frameHeaderLength
         Next datPayloadLen mnext <- responseToNext conn ii datPayloadOff rsp
         fillSend strm otherLen datPayloadLen mnext
-    switch (ONext strm curr) = do
+    switch (ONext strm curr) = unlessClosed strm $ do
         -- Data frame
         Next datPayloadLen mnext <- curr
         fillSend strm 0 datPayloadLen mnext
