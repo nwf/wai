@@ -10,7 +10,6 @@ import Control.Concurrent.STM
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import Data.IORef (IORef, newIORef)
-import Data.Int (Int64)
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as M
 import qualified Network.HTTP.Types as H
@@ -45,8 +44,6 @@ data Output = OFinish
 
 type StreamTable = IntMap Stream
 
-type Window = Int64
-
 data Context = Context {
     http2settings      :: IORef Settings
   , streamTable        :: IORef StreamTable
@@ -58,7 +55,7 @@ data Context = Context {
   , encodeDynamicTable :: IORef DynamicTable
   , decodeDynamicTable :: IORef DynamicTable
   , wait               :: MVar ()
-  , connectionWindow   :: IORef Window
+  , connectionWindow   :: IORef WindowSize
   }
 
 ----------------------------------------------------------------
@@ -106,10 +103,10 @@ data Stream = Stream {
   -- Next two fields are for error checking.
   , streamContentLength :: IORef (Maybe Int)
   , streamBodyLength    :: IORef Int
-  , streamWindow        :: IORef Window
+  , streamWindow        :: IORef WindowSize
   }
 
-newStream :: Int -> Window -> IO Stream
+newStream :: Int -> WindowSize -> IO Stream
 newStream sid win = Stream sid <$> newIORef Idle
                                <*> newIORef Nothing
                                <*> newIORef 0
