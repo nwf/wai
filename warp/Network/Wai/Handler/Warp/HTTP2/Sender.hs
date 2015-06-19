@@ -85,8 +85,8 @@ frameSender ctx@Context{..} conn@Connection{..} ii settings = do
         bs <- toBS connWriteBuffer total
         connSendAll bs
         atomically $ do
-           modifyTVar' connectionWindow (datPayloadLen -)
-           modifyTVar' (streamWindow strm) (datPayloadLen -)
+           modifyTVar' connectionWindow (subtract datPayloadLen)
+           modifyTVar' (streamWindow strm) (subtract datPayloadLen)
         case mnext of
             Nothing   -> do
                 writeIORef (streamState strm) (Closed Finished)
