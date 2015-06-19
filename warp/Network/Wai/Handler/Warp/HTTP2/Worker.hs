@@ -39,6 +39,7 @@ worker Context{..} tm app responder = do
             case m of
                 Nothing   -> return ()
                 Just strm -> do
+                    -- fixme: sending 500
                     writeIORef (streamState strm) $ Closed Killed
                     writeIORef ref Nothing
                     go th ref
