@@ -199,8 +199,11 @@ control FrameGoAway _ _ Context{..} = do
     return False
 
 control FrameWindowUpdate header@FrameHeader{..} bs Context{..} = do
-    WindowUpdateFrame _ <- guardIt $ decodeWindowUpdateFrame header bs
-    -- fixme: valid case
+    WindowUpdateFrame n <- guardIt $ decodeWindowUpdateFrame header bs
+    w <- readIORef connectionWindow
+    let w' = w + fromIntegral n
+    when (w' > 2147483647) $ E.throwIO $ ConnectionError FlowControlError "control window should be less than 2^31"
+    writeIORef connectionWindow w'
     return True
 
 control _ _ _ _ =
@@ -255,8 +258,11 @@ stream FrameContinuation FrameHeader{..} frag ctx (Continued rfrags endOfStream)
 stream FrameContinuation _ _ _ _ _ = E.throwIO $ ConnectionError ProtocolError "continue frame cannot come here"
 
 stream FrameWindowUpdate header@FrameHeader{..} bs Context{..} s Stream{..} = do
-    WindowUpdateFrame _ <- guardIt $ decodeWindowUpdateFrame header bs
-    -- fixme: valid case
+    WindowUpdateFrame n <- guardIt $ decodeWindowUpdateFrame header bs
+    w <- readIORef streamWindow
+    let w' = w + fromIntegral n
+    when (w' > 2147483647) $ E.throwIO $ StreamError FlowControlError streamId
+    writeIORef streamWindow w'
     return s
 
 stream FrameRSTStream header bs _ _ Stream{..} = do
