@@ -74,7 +74,7 @@ newContext = Context <$> newIORef defaultSettings
                      <*> (newDynamicTableForEncoding 4096 >>= newIORef)
                      <*> (newDynamicTableForDecoding 4096 >>= newIORef)
                      <*> newEmptyMVar
-                     <*> newIORef 65535 -- fixme
+                     <*> newIORef (fromIntegral defaultInitialWindowSize)
 
 ----------------------------------------------------------------
 
