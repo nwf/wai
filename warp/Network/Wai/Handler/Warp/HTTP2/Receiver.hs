@@ -200,9 +200,9 @@ control FrameGoAway _ _ Context{..} = do
 
 control FrameWindowUpdate header@FrameHeader{..} bs Context{..} = do
     WindowUpdateFrame n <- guardIt $ decodeWindowUpdateFrame header bs
-    w <- (n +) <$> readIORef connectionWindow
+    w <- (n +) <$> atomically (readTVar connectionWindow)
     when (isWindowOverflow w) $ E.throwIO $ ConnectionError FlowControlError "control window should be less than 2^31"
-    writeIORef connectionWindow w
+    atomically $ writeTVar connectionWindow w
     return True
 
 control _ _ _ _ =
@@ -258,10 +258,10 @@ stream FrameContinuation _ _ _ _ _ = E.throwIO $ ConnectionError ProtocolError "
 
 stream FrameWindowUpdate header@FrameHeader{..} bs Context{..} s Stream{..} = do
     WindowUpdateFrame n <- guardIt $ decodeWindowUpdateFrame header bs
-    w <- (n +) <$> readIORef streamWindow
+    w <- (n +) <$> atomically (readTVar streamWindow)
     when (isWindowOverflow w) $
         E.throwIO $ StreamError FlowControlError streamId
-    writeIORef streamWindow w
+    atomically $ writeTVar streamWindow w
     return s
 
 stream FrameRSTStream header bs _ _ Stream{..} = do

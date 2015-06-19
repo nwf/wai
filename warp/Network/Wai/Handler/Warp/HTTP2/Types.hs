@@ -34,13 +34,13 @@ isHTTP2 tls = useHTTP2
 
 ----------------------------------------------------------------
 
-data Next = Next Int (Maybe (IO Next))
+data Next = Next Int (Maybe (WindowSize -> IO Next))
 
 data Input = Input Stream Request
 data Output = OFinish
             | OResponse Stream Response
             | OFrame ByteString
-            | ONext Stream (IO Next)
+            | ONext Stream (WindowSize -> IO Next)
 
 type StreamTable = IntMap Stream
 
@@ -55,7 +55,7 @@ data Context = Context {
   , encodeDynamicTable :: IORef DynamicTable
   , decodeDynamicTable :: IORef DynamicTable
   , wait               :: MVar ()
-  , connectionWindow   :: IORef WindowSize
+  , connectionWindow   :: TVar WindowSize
   }
 
 ----------------------------------------------------------------
@@ -71,7 +71,7 @@ newContext = Context <$> newIORef defaultSettings
                      <*> (newDynamicTableForEncoding 4096 >>= newIORef)
                      <*> (newDynamicTableForDecoding 4096 >>= newIORef)
                      <*> newEmptyMVar
-                     <*> newIORef (fromIntegral defaultInitialWindowSize)
+                     <*> newTVarIO defaultInitialWindowSize
 
 ----------------------------------------------------------------
 
@@ -103,14 +103,14 @@ data Stream = Stream {
   -- Next two fields are for error checking.
   , streamContentLength :: IORef (Maybe Int)
   , streamBodyLength    :: IORef Int
-  , streamWindow        :: IORef WindowSize
+  , streamWindow        :: TVar WindowSize
   }
 
 newStream :: Int -> WindowSize -> IO Stream
 newStream sid win = Stream sid <$> newIORef Idle
                                <*> newIORef Nothing
                                <*> newIORef 0
-                               <*> newIORef win
+                               <*> newTVarIO win
 
 ----------------------------------------------------------------
 

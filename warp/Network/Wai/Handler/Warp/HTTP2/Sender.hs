@@ -2,7 +2,7 @@
 
 module Network.Wai.Handler.Warp.HTTP2.Sender (frameSender) where
 
-import Control.Concurrent (putMVar)
+import Control.Concurrent (putMVar, forkIO)
 import Control.Concurrent.STM
 import qualified Control.Exception as E
 import Control.Monad (void)
@@ -32,6 +32,21 @@ unlessClosed Stream{..} body = do
         Closed _ -> print state
         _        -> body
 
+checkWindowSize :: TVar WindowSize -> TVar WindowSize -> TQueue Output -> Output -> (WindowSize -> IO ()) -> IO ()
+checkWindowSize connWindow strmWindow outQ out body = do
+   cw <- atomically $ do
+       w <- readTVar connWindow
+       check (w > 0)
+       return w
+   sw <- atomically $ readTVar strmWindow
+   if sw == 0 then do
+       void $ forkIO $ atomically $ do
+           x <- readTVar strmWindow
+           check (x > 0)
+           writeTQueue outQ out
+     else
+       body (min cw sw)
+
 frameSender :: Context -> Connection -> InternalInfo -> S.Settings -> IO ()
 frameSender ctx@Context{..} conn@Connection{..} ii settings = do
     connSendAll initialFrame
@@ -44,21 +59,23 @@ frameSender ctx@Context{..} conn@Connection{..} ii settings = do
     switch (OFrame frame) = do
         connSendAll frame
         loop
-    switch (OResponse strm rsp) = unlessClosed strm $ do
-        -- Header frame
-        let sid = streamNumber strm
-        hdrframe <- headerFrame ctx ii settings sid rsp
-        -- fixme: length check + Continue
-        void $ copy connWriteBuffer hdrframe
-        -- Data frame
-        let otherLen = BS.length hdrframe
-            datPayloadOff = otherLen + frameHeaderLength
-        Next datPayloadLen mnext <- responseToNext conn ii datPayloadOff rsp
-        fillSend strm otherLen datPayloadLen mnext
-    switch (ONext strm curr) = unlessClosed strm $ do
-        -- Data frame
-        Next datPayloadLen mnext <- curr
-        fillSend strm 0 datPayloadLen mnext
+    switch out@(OResponse strm rsp) = unlessClosed strm $
+        checkWindowSize connectionWindow (streamWindow strm) outputQ out $ \lim -> do
+            -- Header frame
+            let sid = streamNumber strm
+            hdrframe <- headerFrame ctx ii settings sid rsp
+            -- fixme: length check + Continue
+            void $ copy connWriteBuffer hdrframe
+                -- Data frame
+            let otherLen = BS.length hdrframe
+                datPayloadOff = otherLen + frameHeaderLength
+            Next datPayloadLen mnext <- responseToNext conn ii datPayloadOff lim rsp
+            fillSend strm otherLen datPayloadLen mnext
+    switch out@(ONext strm curr) = unlessClosed strm $ do
+        checkWindowSize connectionWindow (streamWindow strm) outputQ out $ \lim -> do
+            -- Data frame
+            Next datPayloadLen mnext <- curr lim
+            fillSend strm 0 datPayloadLen mnext
     fillSend strm otherLen datPayloadLen mnext = do
         -- fixme: length check
         let sid = streamNumber strm
@@ -67,6 +84,9 @@ frameSender ctx@Context{..} conn@Connection{..} ii settings = do
         let total = otherLen + frameHeaderLength  + datPayloadLen
         bs <- toBS connWriteBuffer total
         connSendAll bs
+        atomically $ do
+           modifyTVar' connectionWindow (datPayloadLen -)
+           modifyTVar' (streamWindow strm) (datPayloadLen -)
         case mnext of
             Nothing   -> do
                 writeIORef (streamState strm) (Closed Finished)
@@ -90,20 +110,20 @@ ResponseStream Status ResponseHeaders StreamingBody
 ResponseRaw (IO ByteString -> (ByteString -> IO ()) -> IO ()) Response
 -}
 
-responseToNext :: Connection -> InternalInfo -> Int -> Response -> IO Next
-responseToNext Connection{..} _ off (ResponseBuilder _ _ bb) = do
+responseToNext :: Connection -> InternalInfo -> Int -> WindowSize -> Response -> IO Next
+responseToNext Connection{..} _ off lim (ResponseBuilder _ _ bb) = do
     let datBuf = connWriteBuffer `plusPtr` off
-        room = connBufferSize - off
+        room = min (connBufferSize - off) lim
     (len, signal) <- B.runBuilder bb datBuf room
     nextForBuilder len connWriteBuffer connBufferSize signal
 
-responseToNext Connection{..} ii off (ResponseFile _ _ path mpart) = do
+responseToNext Connection{..} ii off lim (ResponseFile _ _ path mpart) = do
     -- fixme: no fdcache
     let Just fdcache = fdCacher ii
     (fd, refresh) <- getFd fdcache path
     let datBuf = connWriteBuffer `plusPtr` off
         Just part = mpart -- fixme: Nothing
-        room = connBufferSize - off
+        room = min (connBufferSize - off) lim
         start = filePartOffset part
         bytes = filePartByteCount part
     len <- positionRead fd datBuf (mini room bytes) start
@@ -111,14 +131,14 @@ responseToNext Connection{..} ii off (ResponseFile _ _ path mpart) = do
     let len' = fromIntegral len
     nextForFile len connWriteBuffer connBufferSize fd (start + len') (bytes - len') refresh
 
-responseToNext _ _ _ _ = error "responseToNext"
+responseToNext _ _ _ _ _ = error "responseToNext"
 
 ----------------------------------------------------------------
 
-fillBufBuilder :: Buffer -> BufSize -> B.BufferWriter -> IO Next
-fillBufBuilder buf siz writer = do
+fillBufBuilder :: Buffer -> BufSize -> B.BufferWriter -> WindowSize -> IO Next
+fillBufBuilder buf siz writer lim = do
     let payloadBuf = buf `plusPtr` frameHeaderLength
-        room = siz - frameHeaderLength
+        room = min (siz - frameHeaderLength) lim
     (len, signal) <- writer payloadBuf room
     nextForBuilder len buf siz signal
 
@@ -133,10 +153,10 @@ nextForBuilder len buf siz (B.Chunk bs writer)
 
 ----------------------------------------------------------------
 
-fillBufFile :: Buffer -> BufSize -> Fd -> Integer -> Integer -> IO () -> IO Next
-fillBufFile buf siz fd start bytes refresh = do
+fillBufFile :: Buffer -> BufSize -> Fd -> Integer -> Integer -> IO () -> WindowSize -> IO Next
+fillBufFile buf siz fd start bytes refresh lim = do
     let payloadBuf = buf `plusPtr` frameHeaderLength
-        room = siz - frameHeaderLength
+        room = min (siz - frameHeaderLength) lim
     len <- positionRead fd payloadBuf (mini room bytes) start
     let len' = fromIntegral len
     refresh
